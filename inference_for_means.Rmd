@@ -1,0 +1,348 @@
+---
+title: "Inference on a population mean"
+output: 
+  html_notebook:
+    toc: true
+    toc_depth: 5
+    toc_float: true
+---
+
+<style type="text/css">
+
+body, td {
+   font-size: 18px;
+}
+h1 {
+  font-size: 32px;
+  font-weight: bold;
+}
+h2 {
+  font-size: 28px;
+  font-weight: bold;
+}
+h3 {
+  font-size: 24px;
+  font-weight: bold;
+}
+h4 {
+  font-size: 20px;
+  font-weight: bold;
+}
+code.r{
+  font-size: 16px;
+}
+pre {
+  font-size: 16px
+}
+</style>
+
+## 1.0 Introduction
+
+The [General Social Survey (GSS)](http://gss.norc.org/) is a sociological survey used to collect data on a wide variety of demographic characteristics and attitudes of residents of the United States. The data has been collected since 1972, approximately every 2 years, by the [National Opinion Research Center (NORC)](http://www.norc.org/Pages/default.aspx) at the University of Chicago. The latest data is from the spring of 2016. The data for the each year the survey was carried out can be found [here](http://gss.norc.org/get-the-data/stata) in STATA format, and [here](http://gss.norc.org/get-the-data/spss) in SPSS format. The [GSS Codebook](http://gss.norc.org/Get-Documentation), in PDF format, documents the survey data for all years. The R notebook can be found in the project’s [Github page](https://github.com/carlosror/stat-inf-means).
+
+
+## 2.0 Variable of interest
+
+This notebook is about making inferences about the true average number of hours, $\mu$, worked per week by Americans employed part-time or full-time. The variable was coded as $HRS1$ in the [GSS Codebook](http://gss.norc.org/documents/codebook/GSS_Codebook_mainbody.pdf), on page 118. The survey asked: **"If working full or part time, how many hours did you work last week, all jobs?"**
+
+
+## 3.0 Reading the data
+
+The R library [**foreign**](https://cran.r-project.org/web/packages/foreign/foreign.pdf) allows R to read in STATA files, among others. We can then get the variable we want as a single columns vector and tabulate some descriptive statistics. 
+
+
+```{r, message=FALSE, warning=FALSE}
+library(foreign) # Used to read STATA (*.DTA) files
+gss2016 <- read.dta("GSS2016.DTA")
+# The variable we are interested in.
+# The NA's were people that were not employed either full-time or part-time.
+gss2016_hrs <- gss2016$hrs1[!is.na(gss2016$hrs1)]
+
+num_obs <- length(gss2016_hrs)
+sample_mean <- mean(gss2016_hrs)
+sample_sd <- sd(gss2016_hrs)
+summary_df <- data.frame(c(num_obs, sample_mean, sample_sd))
+rownames(summary_df) <- c("Number of observations", "Sample mean", "Sample standard deviation")
+colnames(summary_df) <- c("Sample statistics")
+summary_df
+```
+
+
+## 4.0 $95\%$ confidence interval of the average number of hours worked
+
+We can compute a $95\%$ condifence interval for the true average number of hours worked by Americans employed part- or full-time, $\mu$, by using the [Central Limit Theorem (CLT)](http://www.stat.wmich.edu/s160/book/node43.html). The CLT says that the sampling distribution of a statistic, in this case a mean, is approximately normal, with the true population average, $\mu$, as its mean, and the standard error of the sample, $SE=\frac{\sigma}{\sqrt n}$, as its standard deviation, where $\sigma$ is the standard deviation of the population and $n$ the size of each sample. 
+
+$$
+\bar{x}\sim\ N(mean = \mu, sd=\frac{\sigma}{\sqrt n})
+$$
+
+If we were able to draw many samples of equal size of the number of hours worked by Americans employed part- or full-time, and computed the mean of each sample, the CLT says the distribution of that mean is approximately normal.
+
+In reality, we can only draw one sample from the population. We typically don't know either $\mu$ or $\sigma$ of the population. We can use the sample's standard deviation, $s$, as a proxy for $\sigma$, but we still don't know $\mu$. We don't know where the average of the sample we have drawn, $\bar{x}$, falls in the sampling distribution, but from the CLT, we do know that the means of $95\%$ of the samples drawn will fall within $1.96\cdot \frac{s}{\sqrt n}=1.96\cdot SE$ of $\mu$. Therefore, for $95\%$ of the samples we draw, an interval within $1.96\cdot SE$ of $\bar{x}$ will include the true mean of the population. For any sample whose $\bar{x}$ falls within $1.96\cdot SE$ of $\mu$, which will happen $95\%$ of the time, we are $95\%$ confident that an interval centered around $\bar{x}$ and within $1.96\cdot SE$ of $\bar{x}$ will contain the true mean of the population.
+
+### 4.1 An example
+
+To make the point graphically, suppose we have a population with a true mean $\mu=10.0$ and $\sigma=5.0$, and we draw a sample of size $n=100$. Per the CLT, the distribution of sample means taken from that population is approximately normal: $\bar{x}\sim\ N(mean = 10.0, sd=\frac{5.0}{\sqrt{100} }=0.5)$. Any sample drawn from the population whose mean $\bar{x}$ falls within $(10.0-1.96\cdot0.5,\ 10.0+1.96\cdot0.5)=(9.02,\ 10.98)$ will have a $95\%$ confidence interval that contains the true mean, $\mu=10.0$. If we draw a sample from the population, and the sample mean $\bar{x}=10.8$, the $95\%$ confidence interval centered around $\bar{x}=10.8$ will contain the true mean $\mu=10.0$. The $95\%$ confidence interval will be: $(10.8-1.96\cdot0.5,\ 10.8+1.96\cdot0.5)=(9.82,\ 11.78)$.
+
+```{r, echo=FALSE}
+#http://www.statmethods.net/advgraphs/probability.html
+
+n <- 100; sigma <- 5.0
+mu <- 10.0; se <- sigma / sqrt(n)
+
+# x = mu +/- 4 std_dev's
+x <- seq(-4,4,length=1000)*se + mu
+hx <- dnorm(x, mu ,se)
+
+upper_bound <- mu + 1.96 * se 
+lower_bound <- mu - 1.96 * se 
+
+plot(x, hx, type="n", xlab = "", ylab="", main="Sampling distribution of a mean", axes=FALSE)
+
+i <- x >= upper_bound & x <= max(x) # indexes of x where x >= upper_bound
+lines(x, hx) # plots normal distribution
+polygon(c(upper_bound,x[i],max(x)), c(0,hx[i],0), col="grey") # shades area where x >= upper_bound red
+
+j <- x >= min(x) & x <= lower_bound # indexes of x where x <= lower_bound
+polygon(c(min(x),x[j],lower_bound), c(0,hx[j],0), col="grey") # shades area where x <= lower_bound red
+
+axis(1, at=seq(8, 12, 0.2), pos=0) # draws axis
+abline(v=mu)
+grid()
+
+x_bar <- 10.8
+axis(1, at=c(x_bar - 1.96 * se, x_bar, x_bar + 1.96 * se), pos=-0.15, col = "blue", lwd = 2, lwd.ticks = 1) 
+
+text(x = 8.2, y = 0.7, labels = expression(paste(mu, " = 10.0")))
+text(x = 8.2, y = 0.64, labels = expression(paste(sigma, " =  5.0")))
+text(x = 8.2, y = 0.58, labels = expression(paste(n, " = 100")))
+text(x = 8.2, y = 0.52, labels = expression(paste(bar(x), " =10.8")))
+```
+
+If we are unlucky and  draw a sample whose mean $\bar{x}$ falls in the shaded area, which should only happen $5\%$ of the time, its $95\%$ confidence interval will not include the true mean $\mu=10.0$.
+
+```{r, echo=FALSE}
+#http://www.statmethods.net/advgraphs/probability.html
+
+n <- 100; sigma <- 5.0
+mu <- 10.0; se <- sigma / sqrt(n)
+
+# x = mu +/- 4 std_dev's
+x <- seq(-4,4,length=1000)*se + mu
+hx <- dnorm(x, mu ,se)
+
+upper_bound <- mu + 1.96 * se 
+lower_bound <- mu - 1.96 * se 
+
+plot(x, hx, type="n", xlab = "", ylab="", main="Sampling distribution of a mean", axes=FALSE)
+
+i <- x >= upper_bound & x <= max(x) # indexes of x where x >= upper_bound
+lines(x, hx) # plots normal distribution
+polygon(c(upper_bound,x[i],max(x)), c(0,hx[i],0), col="grey") # shades area where x >= upper_bound red
+
+j <- x >= min(x) & x <= lower_bound # indexes of x where x <= lower_bound
+polygon(c(min(x),x[j],lower_bound), c(0,hx[j],0), col="grey") # shades area where x <= lower_bound red
+
+axis(1, at=seq(8, 12, 0.2), pos=0) # draws axis
+abline(v=mu)
+grid()
+
+x_bar <- 8.9
+axis(1, at=c(x_bar - 1.96 * se, x_bar, x_bar + 1.96 * se), pos=-0.15, col = "red", lwd = 2, lwd.ticks = 1) 
+
+text(x = 8.2, y = 0.7, labels = expression(paste(mu, " = 10.0")))
+text(x = 8.2, y = 0.64, labels = expression(paste(sigma, " =  5.0")))
+text(x = 8.2, y = 0.58, labels = expression(paste(n, " = 100")))
+text(x = 8.2, y = 0.52, labels = expression(paste(bar(x), " =  8.9")))
+```
+
+### 4.2 Conditions for the confidence interval
+
+The confidence interval for the true average number of hours worked, $\mu$, is given by:
+
+$$
+\bar{x}\pm z^{*}\cdot SE
+$$
+
+where $\bar{x}$ is the mean of the sample, $z^*$ is the critical value corresponding to the confidence level we want, and the standard error $SE$ is given by 
+
+$$
+SE=\frac{s}{\sqrt{n}}
+$$
+
+where $s$ is the standard deviation of the sample and $n$ is the number of observations in the sample.
+
+The conditions for the validity of the confidence interval are:
+
+1. Sampled observations must be independent.
+
+2. The sample size is large: $n\geq 30$
+
+3. The distribution of sample observations is not strongly skewed.
+
+The survey respondents are a random subset of the population and are independent of each other. The sample size of $1646$ is greater than $30$, so that takes care of the second condition. Finally, we can plot the distribution of the sample to check that it is not strongly skewed either way.
+
+```{r}
+hist(gss2016_hrs, breaks=seq(0,90,5), main = "Distribution of hours worked by Americans each week", xlab = "Hours worked weekly")
+```
+
+### 4.3 Critical value $z^*$
+
+The $z^*$ corresponding to a $95\%$ confidence interval in the [standard normal distribution](https://www.mathsisfun.com/data/standard-normal-distribution-table.html) is approximately 1.96. We can compute it more exactly using R:
+
+```{r}
+z_star <- qnorm(p = 0.025, mean = 0, sd = 1, lower.tail = FALSE)
+cat("z-value corresponding to 95% confidence interval:", z_star)
+```
+
+### 4.4 Standard error of the sample
+
+Next we compute the standard error $SE=\frac{s}{\sqrt{n}}$:
+
+```{r}
+se = sample_sd / sqrt(num_obs)
+cat("Standard error SE =", se)
+```
+
+### 4.5 Confidence interval
+
+We can now compute the confidence interval bounds:
+
+```{r}
+conf_int_lb <- sample_mean - z_star * se
+conf_int_ub <- sample_mean + z_star * se
+cat("Confidence interval lower bound:", conf_int_lb, "\nConfidence interval upper bound:", conf_int_ub)
+```
+
+
+Hence, our confidence interval is
+$$
+\bar{x}\pm z^{*}\cdot SE=40.9143\pm 1.96\cdot 0.3551=(40.2184, 41.6103)
+$$
+
+We are $95\%$ confident that the true mean of hours worked by Americans, $\mu$, is between $40.2184$ and $41.6103$. If we draw $100$ samples of the number of hours worked by Americans employed part-time or full-time and compute the average and confidence interval for each of the samples, $95$ of those confidence intervals will contain the true mean, $\mu$.
+
+## 5.0 Hypothesis testing
+
+We can use the CLT and the data collected to construct a hypothesis testing framework. The hypothesis test considers two possible interpretations of our data, a null hypothesis $H_0$, and an alternative hypothesis $H_a$. $H_0$ basically says that the sampled data could have been drawn simply by chance, and so, it is misleading. There is "nothing going on". $H_a$ takes the view that the data collected reveals that "something *is* going on". We will either reject the null hypothesis in favor of this alternative, or we will fail to reject it and conclude the sampled data could have been drawn simply by chance. Note that even if we fail to reject $H_0$, that does not mean we accept it as the ground truth, it's just that the data we have collected does not allows us to discard $H_0$.
+<br>
+
+For example, can try to answer whether Americans, on average, work more than 40 hours a week. The framework for the hypothesis test would be as follows:
+
+$$
+H_{0}:\mu = 40,\ Americans\ work\ 40\ hours\ a\ week,\ on\ average
+\\
+H_{a}:\mu >40,\ Americans\ work\ more\ than\ 40\ hours\ a\ week,\ on\ average 
+$$
+
+One look at the $95\%$ confidence interval $(40.2184, 41.6103)$ we just computed tells us we can reject the null hypothesis. Since we are $95\%$ sure that the true mean $\mu$ lies between $40.2184$ and $41.6103$, we conclude the data provides strong evidence to reject the null. We believe Americans employed part-time or full-time work more than $40$ hours a week, on average.
+
+### 5.1 The p-value
+
+The p-value quantifies the strength of the evidence against the null hypothesis. We compute it by asking ourselves, given that the null hypothesis $H_0$ is true, what is the probability of observing data as extreme or more as the one we have.
+
+$$
+P(observing\ data\ as\ extreme\ or\ more\ |\ H_{0}\ is\ true)
+$$
+
+That probability is the p-value. Typically, we use a $5\%$ significance level as the threshold to reject the null. If the p-value is less than $5\%$, we reject the null in favor of the alternative.
+
+For our hypothesis framework, under $H_0$ and the CLT, $\bar{x}$ is approximately normally distributed, with a mean $\mu = 40$ and $SE=0.3551$. What is the probability of drawing a sample with a mean $\bar{x}=40.9143$ or higher, given that the null hypothesis is true?
+
+$$
+P(drawing\ a\ sample\ where\ the\ average\ number\ of\ hours\ worked\\ is\ 40.9143\ or\ higher\ |\ H_{0}\ is\ true)
+\\
+P(\bar{x}\ \geq\ 40.9143\ |\ \mu =  40.0)
+$$
+
+We can do it graphically:
+```{r}
+#http://www.statmethods.net/advgraphs/probability.html
+
+mu <- 40.0
+
+# x = mu +/- 4 std_dev's
+x <- seq(-4,4,length=1000)*se + mu
+hx <- dnorm(x, mu ,se)
+
+lb <- sample_mean; ub <- max(x) 
+
+plot(x, hx, type="n", xlab="Average number of hours worked", ylab="", main="Sampling distribution under null hypothesis", axes=FALSE)
+
+i <- x >= lb & x <= ub # indexes of x where x >= than sample_mean
+lines(x, hx) # plots normal distribution
+polygon(c(lb,x[i],ub), c(0,hx[i],0), col="red") # shades area where x >= sample_mean in red
+
+axis(1, at=seq(38, 42, 0.1), pos=0) # draws axis
+abline(v=mu)
+grid()
+
+```
+
+That probability is the area under the sampling distribution shaded in red in the plot. It can be computed using `pnorm()`.
+```{r}
+area <- pnorm(q = sample_mean, mean = mu, sd = se, lower.tail = FALSE)
+cat("Our p-value:", area)
+```
+
+So the probability of drawing the sample we have under the null hypothesis is $0.005$. This is our [p-value](https://en.wikipedia.org/wiki/P-value). There is a $0.5\%$ chance of drawing the sample data we have if the null hypothesis is true. Therefore, we reject the null hypothesis at the $5\%$ significance level, and conclude the data provides convincing evidence that Americans employed part-time or full-time work more than 40 hours a week, on average.
+
+We can also ask whether the data provides sufficent evidence that Americans work fewer than $42$ hours of week, on average. In that case, our null hypothesis is that Americans work $42$ hours a week, on average, and the alternative hypothesis is that they work fewer.
+
+$$
+H_{0}:\mu = 42,\ Americans\ work\ 42\ hours\ a\ week,\ on\ average
+\\
+H_{a}:\mu <42,\ Americans\ work\ fewer\ than\ 42\ hours\ a\ week,\ on\ average
+$$
+
+Again we draw the sampling distribution under the null hypothesis
+```{r}
+mu <- 42.0
+
+# x = mu +/- 4 std_dev's
+x <- seq(-4,4,length=1000)*se + mu
+hx <- dnorm(x, mu ,se)
+
+lb <- min(x); ub <- sample_mean 
+
+plot(x, hx, type="n", xlab="Average number of hours worked", ylab="", main="Sampling distribution under null hypothesis", axes=FALSE)
+
+i <- x >= lb & x <= ub # indexes of x where x <= than sample_mean
+lines(x, hx) # plots normal distribution
+polygon(c(lb,x[i],ub), c(0,hx[i],0), col="red") # shades area where x <= sample_mean in red
+
+axis(1, at=seq(40, 44, 0.1), pos=0) # draws axis
+abline(v=mu)
+grid()
+```
+
+Under the null hypothesis and the CLT, we live in a world in which the sampling distribution of average number of hours worked is centered at $\mu = 42.0$ and has a standard deviation of $se=0.3551$. In such a world, we have drawn a sample where the mean is $\bar{x}=$ $40.9143$ hours worked. What is the probability of drawing a sample with a mean $\bar{x}$ as low or lower, if in fact $\mu=42.0$? 
+
+$$
+P(drawing\ a\ sample\ where\ the\ average\ number\ of\ hours\ worked\\ is\ 40.9143\ or\ lower\ |\ H_{0}\ is\ true)
+\\
+P(\bar{x}\ \leq\ 40.9143\ |\ \mu =  42.0)
+$$
+
+Looking at the tiny red area in the plot, we can surmise it's pretty small probability. It can be computed using `pnorm()`.
+
+```{r}
+area <- pnorm(q = sample_mean, mean = mu, sd = se, lower.tail = TRUE)
+cat("Our p-value:", area)
+```
+
+So our [p-value](https://en.wikipedia.org/wiki/P-value), the probability of drawing a sample where the average number of hours is $40.9143$ or fewer under the null hypothesis, is about $0.001$. Therefore, we reject the null hypothesis at the $5\%$ significance level, and conclude the data collected provides convincing evidence that Americans work fewer than $42$ hours a week, on average.
+
+## References
+
+1. Çetinkaya-Rundel, M. ***Data Analysis and Statistical Inference***. Spring 2014. [Coursera](www.coursera.org).
+
+2. Diez, D., Barr, C., Çetinkaya-Rundel, M. ***OpenIntro Statistics, Second Edition***. PDF.
+
+3. Navidi, W. ***Statistics for engineers and scientists, Third Edition***. New York: McGraw Hill, 2011.
+
+4. UCLA Institute for Digital Reserach and Education, ***HOW CAN I INCLUDE GREEK LETTERS IN MY PLOT LABELS? | R CODE FRAGMENTS***. Retrieved from [https://stats.idre.ucla.edu](https://stats.idre.ucla.edu/r/codefragments/greek_letters/)
+
+5. Kabacoff, R. ***Probability Plots***. Retrieved from [http://www.statmethods.net](http://www.statmethods.net/advgraphs/probability.html)
+
+6. Carlos Cinelli and Tom, ***Code chunk font size in Rmarkdown with knitr and latex***. Retrieved from [https://stackoverflow.com](https://stackoverflow.com/questions/25646333/code-chunk-font-size-in-rmarkdown-with-knitr-and-latex)
